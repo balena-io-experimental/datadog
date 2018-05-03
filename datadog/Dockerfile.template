@@ -1,0 +1,27 @@
+FROM resin/%%RESIN_MACHINE_NAME%%-golang
+
+RUN apt-get update && apt-get install -yq sysstat python python-dev python-pip git && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /usr/app/src/github.com/DataDog/datadog-agent
+
+ENV INITSYSTEM on
+ENV GOPATH=/usr/app
+ENV PATH=$PATH:/usr/app/bin
+
+RUN pip install invoke
+
+RUN git clone https://github.com/DataDog/datadog-agent.git /usr/app/src/github.com/DataDog/datadog-agent
+
+COPY fix_32bit.patch /usr/app/src/github.com/DataDog/datadog-agent/
+
+RUN export PATH=$PATH:$GOPATH/bin && \
+  cd /usr/app/src/github.com/DataDog/datadog-agent && \
+  patch -p1 < fix_32bit.patch && \
+  invoke deps && \
+  invoke agent.build --build-exclude=snmp
+
+COPY docker.yaml bin/agent/dist/conf.d/docker.d/conf.yaml
+COPY datadog.yaml bin/agent/dist/datadog.yaml
+
+ENTRYPOINT /usr/app/src/github.com/DataDog/datadog-agent/bin/agent/agent -c /usr/app/src/github.com/DataDog/datadog-agent/bin/agent/dist/datadog.yaml start
